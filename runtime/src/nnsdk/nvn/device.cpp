@@ -10,6 +10,7 @@
 #include <utility>
 #include <vector>
 
+#include "nnsdk/nvn/flags.h"
 #include "nnsdk/nvn/formats.h"
 #include "nnsdk/nvn/nvn.h"
 #include "nnsdk/nvn/vk.h"
@@ -122,7 +123,23 @@ int device_info(int id) {
 
 namespace nvn {
 int g_window_origin_mode = 0;
-int g_depth_mode = 0;
+int g_depth_mode = -1;  // -1: el juego no ha llamado a SetDepthMode (ver depth_mode())
+
+// Profundidad [0,1] (NEAR_IS_ZERO) si el juego no fija el modo. Los demás juegos lo fijan ellos mismos justo después
+// de crear el dispositivo, antes de traducir ningún shader; Catherine: Full Body nunca llama a SetDepthMode y sus
+// datos están hechos para [0,1]: los planos de su profundidad de campo (focalPlane/farBlurPlane, en unidades del
+// buffer de profundidad, sacados tal cual de las cinemáticas) solo tienen sentido con la z de NDC sin convertir. Con
+// la conversión de OpenGL ((z+1)/2) la cara de un primer plano (z 0,87, guardada 0,93) caía detrás del foco (0,9) y
+// las cinemáticas del Golden Playhouse salían desenfocadas enteras. <datos>/profundidad_gl (al arrancar): como antes.
+int depth_mode() {
+    if (g_depth_mode >= 0) return g_depth_mode;
+    static const int fallback = [] {
+        const int mode = NVN_FLAG("profundidad_gl") ? 0 : 1;
+        NVN_LOG("DepthMode sin fijar por el juego: %d (%s)\n", mode, mode ? "[0,1]" : "[-1,1], profundidad_gl");
+        return mode;
+    }();
+    return fallback;
+}
 }  // namespace nvn
 using nvn::g_depth_mode;
 using nvn::g_window_origin_mode;
@@ -165,7 +182,7 @@ void nvnDeviceSetDepthMode(void* device, int mode) {
 }
 
 int nvnDeviceGetWindowOriginMode(const void*) { return g_window_origin_mode; }
-int nvnDeviceGetDepthMode(const void*) { return g_depth_mode; }
+int nvnDeviceGetDepthMode(const void*) { return nvn::depth_mode(); }
 int nvnDeviceBuilderGetFlags(const DeviceBuilder* b) { return b->flags; }
 
 // Los colores de borrado rápido son una optimización del hardware de la Switch (una tabla de colores que el ZBC borra

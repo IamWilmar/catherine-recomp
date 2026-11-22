@@ -313,7 +313,7 @@ bool translate_stage(nvn::ProgramStage& out, uint64_t previous_stores = ~0ull, i
     }
     auto start = std::chrono::steady_clock::now();
     nvnshader::Options options;
-    options.convert_depth_mode = nvn::g_depth_mode == 0;
+    options.convert_depth_mode = nvn::depth_mode() == 0;
     if (out.control) {  // compute: inicio del código (+0x708), workgroup (+0x748) y memoria compartida (+0x754)
         const auto* control = static_cast<const uint8_t*>(out.control);
         memcpy(&options.compute_code_offset, control + 0x708, 4);

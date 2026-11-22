@@ -76,7 +76,8 @@ private:
 // Modos globales del dispositivo (device.cpp). NVNwindowOriginMode: 0 LOWER_LEFT, 1 UPPER_LEFT.
 // NVNdepthMode: 0 NEAR_IS_MINUS_W (estilo OpenGL), 1 NEAR_IS_ZERO.
 extern int g_window_origin_mode;
-extern int g_depth_mode;
+extern int g_depth_mode;  // -1 hasta que el juego lo fije: leerlo con depth_mode()
+int depth_mode();         // el del juego o, si no lo fija, [0,1] (device.cpp)
 
 }  // namespace nvn
 
