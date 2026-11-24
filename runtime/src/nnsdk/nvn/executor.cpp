@@ -9772,9 +9772,15 @@ void Executor::draw(const cmd::Draw& in) {
                     else
                         memset(a.data + size, 0, zero_pad);
                 }
+                // Profundidad de campo de Catherine (pase CoC): con <datos>/sin_desenfoque (la fila "Desenfoque" del panel
+                // del HUD) el círculo de confusión sale 0 en todo el cuadro: límite del lado lejano y pendiente del cercano a
+                // 0, y la composición deja la imagen nítida.
                 if (r.kind == Resource::UniformBuffer && r.cbuf_index == 3 && size >= 24 &&
-                    st_.stages[s]->print == 0x8ff3083d0243b7a0ull && !NVN_FLAG("sin_dof_cerca_25"))
-                    dof_planes_to_camera(reinterpret_cast<float*>(a.data));
+                    st_.stages[s]->print == 0x8ff3083d0243b7a0ull) {
+                    float* dof = reinterpret_cast<float*>(a.data);
+                    if (NVN_FLAG("sin_desenfoque")) dof[3] = 0.0f, dof[4] = 0.0f, dof[5] = 0.0f;
+                    else if (!NVN_FLAG("sin_dof_cerca_25")) dof_planes_to_camera(dof);
+                }
                 prof_copied_bytes_ += size;
                 note_copy(range.address, size, r.kind == Resource::StorageBuffer, s);
                 if (from_game && !zero_pad) copied_.insert(range.address, size, a.buffer, a.offset);

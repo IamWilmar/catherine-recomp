@@ -12,6 +12,8 @@
 // vuelve a salir la próxima vez que se abra.
 // En los ports con modo TV (NIER_TV_MODE en el entorno) hay otra, "Modo TV" (el fichero <datos>/modo_tv): el juego cree
 // estar en la base (más resolución, mando Pro) desde la próxima vez que se abra.
+// En los que lo traen (NIER_DESENFOQUE en el entorno: Catherine) hay otra, "Desenfoque": apagada (el fichero
+// <datos>/sin_desenfoque) quita la profundidad de campo del juego en el momento y todo sale nítido.
 // En las APKs publicadas (paquete io.github.iamwilmar.*) hay además "Guardar reporte" (log, captura del frame en que
 // se abrió el panel e info del aparato en <datos>/reports/<fecha>/, para adjuntarlo a mano en un issue; no se manda a
 // ningún sitio) y "Avisos de versión" (al abrir, una consulta sin clave a la API pública de GitHub por la última

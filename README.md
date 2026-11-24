@@ -84,8 +84,9 @@ may stutter while its shaders are translated and compiled; they are cached for t
   Y on the left. You can change the mode from the quick settings while the game is running. Any other controller, over
   USB or Bluetooth (a DualSense, for example), is read by position too: its bottom button is B.
 - **Settings panel.** Swipe in from the right edge of the screen (the system's back gesture, the one that shows an arrow)
-  and a panel slides out over the game. It has a switch for the FPS counter (your choice is remembered), *TV mode* and *Change
-  folder*, which brings the folder screen back the next time you open the app. The same swipe, a tap outside the panel
+  and a panel slides out over the game. It has a switch for the FPS counter (your choice is remembered), *TV mode*, *Change
+  folder*, which brings the folder screen back the next time you open the app, and *Depth of field*: the game's own
+  background blur in cutscenes and menus; switch it off and everything is sharp, at once. The same swipe, a tap outside the panel
   or a few seconds without touching it hide it again.
 - **Save report** (settings panel): writes a folder `reports/<date>/` into the game folder with the log, a screenshot of
   the moment you opened the panel, the frame times of the last seconds and basic device information (model, Android
@@ -106,6 +107,7 @@ at start-up.
 |---|---|
 | `modo_tv` | TV mode (the same switch as in the settings panel): the game renders as it does on a TV. Read at start-up. |
 | `sin_fps` | Hides the FPS counter (the same switch as in the settings panel). |
+| `sin_desenfoque` | Turns the game's depth of field off: everything sharp (the same switch as in the settings panel). Read while the game runs. |
 | `sin_avisos_version` | Turns the update notices off: no request to GitHub (the same switch as in the settings panel). |
 | `con_barras_sistema` | Keeps Android's navigation and status bars on screen. By default the app hides them while the game runs (swipe in from an edge to bring them up for a moment). Read when the game window gets focus. |
 | `botones_xbox`, `botones_retro` | Force the face buttons to be read by position (`botones_xbox`) or by name (`botones_retro`) if a controller comes out swapped. |
@@ -175,8 +177,9 @@ CPU y este proyecto reimplementa el SDK de la consola y la API gráfica NVN sobr
   grandes para el juego). Probado en la Flip 2.
 - Los botones quedan donde están en la consola original del juego en los dos modos del mando de la Retroid (Xbox y
   Retro), y cualquier otro mando, por USB o Bluetooth, se lee por posición. Deslizando un dedo desde el borde derecho de
-  la pantalla sale un panel de ajustes, con el interruptor del contador de FPS, el del modo TV y el de volver a elegir la
-  carpeta. Con la carpeta ya elegida, la app abre el juego directamente.
+  la pantalla sale un panel de ajustes, con el interruptor del contador de FPS, el del modo TV, el de volver a elegir la
+  carpeta y *Desenfoque* (el desenfoque de fondo del propio juego en cinemáticas y menús: apagado, todo sale nítido, al
+  momento). Con la carpeta ya elegida, la app abre el juego directamente.
 - En ese panel también está *Guardar reporte*: el log, una captura del momento en que abriste el panel e información del
   aparato van a `reports/` dentro de la carpeta del juego, sin enviarse a ningún sitio; para avisar de un fallo, abre un
   [issue](https://github.com/IamWilmar/catherine-recomp/issues) y adjúntalos. Y los *avisos de versión* (encendidos de serie): al

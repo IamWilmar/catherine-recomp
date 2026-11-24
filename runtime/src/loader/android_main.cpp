@@ -779,6 +779,7 @@ void android_main(android_app* app) {
     setenv("NIER_ACTIVIDAD", puntero, 1);
     setenv("NIER_SETUP", "1", 1);  // la carpeta sale de la pantalla de inicio: el panel del HUD ofrece cambiarla
     setenv("NIER_TV_MODE", "1", 1);  // este port tiene modo TV (nnsdk::tv_mode): el panel del HUD lo ofrece
+    setenv("NIER_DESENFOQUE", "1", 1);  // el panel del HUD deja apagar la profundidad de campo (<datos>/sin_desenfoque)
     setenv("NIER_TRAZA_DESDE", "94", 1);  // DEPURACIÓN: también vuelca los shaders de los draws trazados desde aquí
     setenv("NIER_VOLCAR_TRAS", "", 1);  // DEPURACIÓN: RT tras esos draws
     setenv("NIER_VOLCAR_TAM", "", 1);  // DEPURACIÓN: RT tras los draws a ese tamaño

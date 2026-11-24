@@ -477,6 +477,8 @@ private:
             if (marked != choose_folder_) choose_folder_ = marked, panel_dirty_ = true;
             const bool tv = has_tv() && access(data_file("modo_tv").c_str(), F_OK) == 0;
             if (tv != tv_) tv_ = tv, panel_dirty_ = true;
+            const bool dof = has_dof() && access(data_file("sin_desenfoque").c_str(), F_OK) != 0;
+            if (dof != dof_) dof_ = dof, panel_dirty_ = true;
             // El frame de ahora, sin el panel encima, es el que va en "Guardar reporte" (mientras se guarda uno, no).
             if (published_app() && swapchain_src_ && report_state_ != kSaving) capture_wanted_ = true;
         }
@@ -484,12 +486,13 @@ private:
     // Las filas del panel, en orden: el contador de FPS siempre; el modo TV si el port lo tiene; cambiar de carpeta si
     // la app tiene pantalla de inicio; y en las APKs publicadas, guardar reporte, los avisos de versión y, si hay una
     // versión nueva, descargarla.
-    enum RowId { kRowFps, kRowTv, kRowFolder, kRowReport, kRowUpdates, kRowDownload };
+    enum RowId { kRowFps, kRowTv, kRowFolder, kRowDof, kRowReport, kRowUpdates, kRowDownload };
     int rows(RowId* out) const {
         int n = 0;
         out[n++] = kRowFps;
         if (has_tv()) out[n++] = kRowTv;
         if (has_setup()) out[n++] = kRowFolder;
+        if (has_dof()) out[n++] = kRowDof;
         if (published_app()) {
             out[n++] = kRowReport;
             out[n++] = kRowUpdates;
@@ -501,6 +504,11 @@ private:
     static bool has_tv() {
         static const bool tv = getenv("NIER_TV_MODE") != nullptr;
         return tv;
+    }
+    // ¿El port deja apagar la profundidad de campo del juego? El loader pone NIER_DESENFOQUE en los que lo traen (Catherine).
+    static bool has_dof() {
+        static const bool dof = getenv("NIER_DESENFOQUE") != nullptr;
+        return dof;
     }
     // <datos>/<name>.
     static std::string data_file(const char* name) {
@@ -562,6 +570,7 @@ private:
                             if (ids[row] == kRowFps) set_hidden(!hidden_);
                             else if (ids[row] == kRowTv) set_tv(!tv_);
                             else if (ids[row] == kRowFolder) set_choose_folder(!choose_folder_);
+                            else if (ids[row] == kRowDof) set_dof(!dof_);
                             else if (ids[row] == kRowReport) start_report();
                             else if (ids[row] == kRowUpdates) set_update_notices(!update_notices_);
                             else if (ids[row] == kRowDownload) open_release_page();
@@ -609,6 +618,19 @@ private:
             close(fd);
         }
         NVN_LOG("hud: modo TV al abrir la app: %s\n", on ? "sí" : "no");
+    }
+    // "Desenfoque": la profundidad de campo del juego (encendida por defecto). Apagada, con el fichero
+    // <datos>/sin_desenfoque, todo sale nítido; vale en el momento (executor.cpp, pase CoC).
+    void set_dof(bool on) {
+        dof_ = on;
+        panel_dirty_ = true;
+        const std::string file = data_file("sin_desenfoque");
+        if (on) {
+            unlink(file.c_str());
+        } else if (const int fd = open(file.c_str(), O_WRONLY | O_CREAT, 0644); fd >= 0) {
+            close(fd);
+        }
+        NVN_LOG("hud: profundidad de campo %s desde el panel\n", on ? "encendida" : "apagada");
     }
     void record_panel(VkCommandBuffer cmd, VkImage image, VkExtent2D extent, bool bgra, int64_t now) {
         const uint32_t w = extent.width / 3, h = extent.height;
@@ -969,7 +991,8 @@ private:
         };
         const Row all[] = {{"CONTADOR DE FPS", "FPS COUNTER", nullptr, nullptr, !hidden_},
                            {"MODO TV", "TV MODE", "AL ABRIR LA APP", "AT NEXT START", tv_},
-                           {"CAMBIAR CARPETA", "CHANGE FOLDER", "AL ABRIR LA APP", "AT NEXT START", choose_folder_}};
+                           {"CAMBIAR CARPETA", "CHANGE FOLDER", "AL ABRIR LA APP", "AT NEXT START", choose_folder_},
+                           {"DESENFOQUE", "DEPTH OF FIELD", nullptr, nullptr, dof_}};
         RowId ids[8];
         const int count = rows(ids);
         int y = kPanelHeader;
@@ -1003,8 +1026,8 @@ private:
             rect(margin, y + kPanelRow - 2, w - 2 * margin, 2, kLine);
             y += kPanelRow;
         }
-        // Al pie, cómo se cierra.
-        text(margin, h - 70, 3, es ? "TOCA FUERA PARA CERRAR" : "TAP OUTSIDE TO CLOSE", kDim);
+        // Al pie, cómo se cierra (si queda sitio debajo de las filas).
+        if (y + 20 < h - 70) text(margin, h - 70, 3, es ? "TOCA FUERA PARA CERRAR" : "TAP OUTSIDE TO CLOSE", kDim);
     }
     bool create(std::vector<Buffer>& buffers, uint32_t width, uint32_t height, uint32_t count = kRing) {
         VkContext* c = vk();
@@ -1095,6 +1118,7 @@ private:
     bool panel_dirty_ = true, panel_drawn_hidden_ = false;  // hay que redibujarlo; el estado con el que se dibujó
     bool choose_folder_ = false;                   // la fila "Cambiar carpeta" (el fichero <datos>/elegir_carpeta)
     bool tv_ = false;                              // la fila "Modo TV" (el fichero <datos>/modo_tv)
+    bool dof_ = true;                              // la fila "Desenfoque" (sin el fichero <datos>/sin_desenfoque)
     uint32_t panel_w_ = 0, panel_h_ = 0;           // el tamaño con el que se crearon sus buffers
     float panel_from_ = 0.0f;                     // lo que asomaba cuando se abrió o se cerró por última vez
     int64_t panel_at_ = 0, touched_at_ = 0;       // cuándo fue eso, y la última vez que se tocó
