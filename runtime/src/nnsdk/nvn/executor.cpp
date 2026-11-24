@@ -2942,6 +2942,21 @@ private:
     bool probe_armed_ = false;
     uint64_t diag_skipped_base_ = 0;
     int diag_lines_ = 0;
+    // Plano cercano/lejano de la cámara principal en este frame (del uniform buffer de escena), para
+    // dof_planes_to_camera. 0: aún sin ver la vista principal en este frame.
+    float cam_near_ = 0.0f, cam_far_ = 0.0f;
+    uint64_t cam_frame_ = ~0ull;
+    void note_camera_planes();
+    // Profundidad de campo de Catherine: Full Body (pase CoC ps 8ff3083d0243b7a0, ubo0 = focal, cerca, lejos, límite en
+    // profundidad (z+1)/2, y las inversas de los dos rangos). Los planos salen tal cual de los datos de cada cámara
+    // (registros de foco + plano cercano/lejano de la cinemática), y en las cámaras con el plano cercano por debajo de 25
+    // (título 1, menús 10, cafetería 15) solo tienen sentido leídos con cercano 25: con su propia proyección los
+    // primeros planos y los menús salían desenfocados enteros. Medido toma a toma contra un vídeo de la versión de consola
+    // (23-11): con esta conversión coinciden el título, los menús, la intro del bar (cámaras de 10, 15, 50 y 200) y la
+    // cafetería (15 y 25). Por qué la consola se comporta así no está claro (¿un cercano mínimo de 25 en su cámara?).
+    // Los planos se pasan de "cercano 25" a la proyección del frame y se recalculan las inversas.
+    // <datos>/sin_dof_cerca_25 (en vivo): sin convertir, como antes.
+    void dof_planes_to_camera(float* ubo);
 public:
     void frame_diag() {
         diag_.skipped = static_cast<uint32_t>(skipped_draws_ - diag_skipped_base_);
@@ -8799,6 +8814,50 @@ static bool absurd_draw(uint32_t count, uint32_t instances) {
     return count > (1u << 24) || instances > (1u << 20) || uint64_t{count} * instances > (1ull << 28);
 }
 
+void Executor::note_camera_planes() {
+    if (cam_frame_ == frame_ || !st_.rt.depth) return;
+    const Texture* d = st_.rt.depth;
+    if (d->desc.width < 1280 || d->desc.width == d->desc.height) return;  // la vista principal, no las sombras
+    const BufferRange& u = st_.bindings[static_cast<int>(Stage::Vertex)].uniforms[1];
+    float m[16];
+    if (u.size != 144 || !u.address || !safe_read(m, reinterpret_cast<const void*>(u.address), sizeof m)) return;
+    const float* r2 = m + 8;
+    const float* r3 = m + 12;
+    const float den = r3[0] * r3[0] + r3[1] * r3[1] + r3[2] * r3[2];
+    if (den <= 0.0f) return;
+    const float a = (r2[0] * r3[0] + r2[1] * r3[1] + r2[2] * r3[2]) / den;
+    const float b = -(r2[3] - a * r3[3]);
+    if (a <= 1.0f || b <= 0.0f) return;
+    const float fn = (a + 1.0f) / (a - 1.0f);
+    cam_near_ = b * (fn - 1.0f) / (2.0f * fn);
+    cam_far_ = cam_near_ * fn;
+    cam_frame_ = frame_;
+}
+
+void Executor::dof_planes_to_camera(float* p) {
+    if (cam_frame_ != frame_ || cam_near_ <= 0.0f || cam_far_ <= cam_near_) return;
+    constexpr double kAuthoredNear = 25.0;
+    const double n = cam_near_, f = cam_far_;
+    // Solo cámaras con el plano cercano por debajo de 25 (título 1, menús 10, cafetería 15): sus planos de foco están
+    // hechos para 25. Las de 25 o más (50, 200 en la intro del bar) ya traen los suyos: convertirlos los estropea.
+    if (n >= kAuthoredNear - 0.5) return;
+    // profundidad (z+1)/2 con cercano 25 -> distancia -> profundidad con la proyección real
+    auto convert = [&](float depth) -> float {
+        if (depth <= 0.0f || depth >= 1.0f) return depth;
+        const double k = 1.0 - depth * (f - kAuthoredNear) / f;
+        if (k <= 0.0) return depth;
+        const double dist = kAuthoredNear / k;
+        if (dist <= n) return 0.0f;
+        return static_cast<float>(f / (f - n) * (1.0 - n / dist));
+    };
+    const float in[3] = {p[0], p[1], p[2]};
+    p[0] = convert(in[0]);
+    p[1] = convert(in[1]);
+    p[2] = convert(in[2]);
+    if (p[0] > p[1]) p[4] = 1.0f / (p[0] - p[1]);
+    if (p[2] > p[0]) p[5] = 1.0f / (p[2] - p[0]);
+}
+
 void Executor::draw(const cmd::Draw& in) {
     // Con el rasterizador descartado el draw sigue: lo que cuenta son las escrituras del vertex shader en SSBO (antes se
     // saltaba y en Xenoblade no salían los personajes). sin_descarte: saltarlo, como antes.
@@ -8806,6 +8865,7 @@ void Executor::draw(const cmd::Draw& in) {
         if (frame_ == trace_frame_) prof_disabled_draws_++;
         return;
     }
+    note_camera_planes();  // una vez por frame (dof_planes_to_camera)
     // Targets 3D de más capas de las que aguanta un framebuffer: el draw se repite por tandas (ver layer_chunks).
     if (!in_layer_chunks_ && st_.rt.count > 0)
         if (const uint32_t chunks = layer_chunks(st_.rt); chunks > 1) {
@@ -9712,6 +9772,9 @@ void Executor::draw(const cmd::Draw& in) {
                     else
                         memset(a.data + size, 0, zero_pad);
                 }
+                if (r.kind == Resource::UniformBuffer && r.cbuf_index == 3 && size >= 24 &&
+                    st_.stages[s]->print == 0x8ff3083d0243b7a0ull && !NVN_FLAG("sin_dof_cerca_25"))
+                    dof_planes_to_camera(reinterpret_cast<float*>(a.data));
                 prof_copied_bytes_ += size;
                 note_copy(range.address, size, r.kind == Resource::StorageBuffer, s);
                 if (from_game && !zero_pad) copied_.insert(range.address, size, a.buffer, a.offset);

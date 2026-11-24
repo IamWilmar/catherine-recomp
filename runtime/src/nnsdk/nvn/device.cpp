@@ -125,17 +125,18 @@ namespace nvn {
 int g_window_origin_mode = 0;
 int g_depth_mode = -1;  // -1: el juego no ha llamado a SetDepthMode (ver depth_mode())
 
-// Profundidad [0,1] (NEAR_IS_ZERO) si el juego no fija el modo. Los demás juegos lo fijan ellos mismos justo después
-// de crear el dispositivo, antes de traducir ningún shader; Catherine: Full Body nunca llama a SetDepthMode y sus
-// datos están hechos para [0,1]: los planos de su profundidad de campo (focalPlane/farBlurPlane, en unidades del
-// buffer de profundidad, sacados tal cual de las cinemáticas) solo tienen sentido con la z de NDC sin convertir. Con
-// la conversión de OpenGL ((z+1)/2) la cara de un primer plano (z 0,87, guardada 0,93) caía detrás del foco (0,9) y
-// las cinemáticas del Golden Playhouse salían desenfocadas enteras. <datos>/profundidad_gl (al arrancar): como antes.
+// Si el juego no fija el modo: el de NVN por defecto, NEAR_IS_MINUS_W (estilo OpenGL, (z+1)/2). Los demás juegos lo
+// fijan ellos mismos justo después de crear el dispositivo, antes de traducir ningún shader; Catherine: Full Body nunca
+// llama a SetDepthMode, y sus planos de profundidad de campo (en unidades del buffer de profundidad) están calculados
+// con (z+1)/2: en la toma por encima del hombro de la cafetería el plano cercano del desenfoque cae justo en el hombro
+// de Vincent y el foco en Katherine, como en la versión de consola. [0,1] (v0.1.2) arreglaba los primeros planos y
+// estropeaba esa toma; los primeros planos los arregla dof_planes_to_camera (executor.cpp).
+// <datos>/profundidad_01 (al arrancar): [0,1], para comparar.
 int depth_mode() {
     if (g_depth_mode >= 0) return g_depth_mode;
     static const int fallback = [] {
-        const int mode = NVN_FLAG("profundidad_gl") ? 0 : 1;
-        NVN_LOG("DepthMode sin fijar por el juego: %d (%s)\n", mode, mode ? "[0,1]" : "[-1,1], profundidad_gl");
+        const int mode = NVN_FLAG("profundidad_01") ? 1 : 0;
+        NVN_LOG("DepthMode sin fijar por el juego: %d (%s)\n", mode, mode ? "[0,1], profundidad_01" : "[-1,1], el de NVN");
         return mode;
     }();
     return fallback;
