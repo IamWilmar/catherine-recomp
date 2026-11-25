@@ -125,18 +125,19 @@ namespace nvn {
 int g_window_origin_mode = 0;
 int g_depth_mode = -1;  // -1: el juego no ha llamado a SetDepthMode (ver depth_mode())
 
-// Si el juego no fija el modo: el de NVN por defecto, NEAR_IS_MINUS_W (estilo OpenGL, (z+1)/2). Los demás juegos lo
-// fijan ellos mismos justo después de crear el dispositivo, antes de traducir ningún shader; Catherine: Full Body nunca
-// llama a SetDepthMode, y sus planos de profundidad de campo (en unidades del buffer de profundidad) están calculados
-// con (z+1)/2: en la toma por encima del hombro de la cafetería el plano cercano del desenfoque cae justo en el hombro
-// de Vincent y el foco en Katherine, como en la versión de consola. [0,1] (v0.1.2) arreglaba los primeros planos y
-// estropeaba esa toma; los primeros planos los arregla dof_planes_to_camera (executor.cpp).
-// <datos>/profundidad_01 (al arrancar): [0,1], para comparar.
+// Si el juego no fija el modo: [0,1] (NEAR_IS_ZERO). Los demás juegos lo fijan ellos mismos justo después de crear el
+// dispositivo, antes de traducir ningún shader; Catherine: Full Body nunca llama a SetDepthMode y su cámara es de
+// estilo OpenGL. En la consola recorta como [0,1]: lo que queda a menos de ~2 veces el plano cercano no sale. En la
+// escena del sushi del día 2 (Kappa Heaven) un trozo de la barra queda a 52-56 u de una cámara de cercano 30; con
+// [-1,1] tapaba toda la toma (negra encima de la cinta) y en la versión de consola se ve a Johnny y Vincent con los
+// shoji detrás, igual que con [0,1] (corte a 59 u). Los planos de la profundidad de campo los pasa a [0,1]
+// Executor::dof_planes_to_camera, a las mismas distancias que con [-1,1].
+// <datos>/profundidad_gl (al arrancar): [-1,1], como hasta la v0.1.4.
 int depth_mode() {
     if (g_depth_mode >= 0) return g_depth_mode;
     static const int fallback = [] {
-        const int mode = NVN_FLAG("profundidad_01") ? 1 : 0;
-        NVN_LOG("DepthMode sin fijar por el juego: %d (%s)\n", mode, mode ? "[0,1], profundidad_01" : "[-1,1], el de NVN");
+        const int mode = NVN_FLAG("profundidad_gl") ? 0 : 1;
+        NVN_LOG("DepthMode sin fijar por el juego: %d (%s)\n", mode, mode ? "[0,1], como en la consola" : "[-1,1], profundidad_gl");
         return mode;
     }();
     return fallback;

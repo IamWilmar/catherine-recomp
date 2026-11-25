@@ -8836,18 +8836,21 @@ void Executor::note_camera_planes() {
 
 void Executor::dof_planes_to_camera(float* p) {
     if (cam_frame_ != frame_ || cam_near_ <= 0.0f || cam_far_ <= cam_near_) return;
-    constexpr double kAuthoredNear = 25.0;
     const double n = cam_near_, f = cam_far_;
-    // Solo cámaras con el plano cercano por debajo de 25 (título 1, menús 10, cafetería 15): sus planos de foco están
-    // hechos para 25. Las de 25 o más (50, 200 en la intro del bar) ya traen los suyos: convertirlos los estropea.
-    if (n >= kAuthoredNear - 0.5) return;
-    // profundidad (z+1)/2 con cercano 25 -> distancia -> profundidad con la proyección real
+    // Los planos de foco van en profundidad (z+1)/2: las cámaras con el plano cercano por debajo de 25 (título 1, menús 10,
+    // cafetería 15) con cercano 25; las de 25 o más (50, 200 en la intro del bar) con el suyo (comparado toma a toma con
+    // la versión de consola). Se pasan a distancia y de ahí a la profundidad del buffer: (z+1)/2 con el cercano de la
+    // cámara o, en [0,1] (depth_mode, el de la consola), z de NDC tal cual.
+    const bool zero_to_one = nvn::depth_mode() == 1;
+    const double kAuthoredNear = n < 24.5 ? 25.0 : n;
+    if (n >= 24.5 && !zero_to_one) return;  // ya están en las unidades del buffer
     auto convert = [&](float depth) -> float {
         if (depth <= 0.0f || depth >= 1.0f) return depth;
         const double k = 1.0 - depth * (f - kAuthoredNear) / f;
         if (k <= 0.0) return depth;
         const double dist = kAuthoredNear / k;
         if (dist <= n) return 0.0f;
+        if (zero_to_one) return static_cast<float>(std::max(0.0, ((f + n) - 2.0 * f * n / dist) / (f - n)));
         return static_cast<float>(f / (f - n) * (1.0 - n / dist));
     };
     const float in[3] = {p[0], p[1], p[2]};
