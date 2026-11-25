@@ -33,6 +33,7 @@ struct VkContext {
     // logicOp (feature del núcleo): las operaciones lógicas de nvnColorStateSetLogicOp (Xenoblade: OR en las máscaras de
     // luces por píxel, RG32UI). Sin ella las pipelines salen sin operación lógica, como antes.
     bool logic_op = false;
+    bool depth_bias_clamp = false;  // vkCmdSetDepthBias con límite distinto de 0
     uint32_t max_custom_border_samplers = 0;
     // VK_KHR_draw_indirect_count: los multi-draw de NVN con el número de draws en la GPU (nulos sin la extensión).
     PFN_vkCmdDrawIndexedIndirectCountKHR draw_indexed_indirect_count = nullptr;

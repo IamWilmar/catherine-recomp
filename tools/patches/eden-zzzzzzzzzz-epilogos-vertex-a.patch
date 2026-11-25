@@ -1,0 +1,27 @@
+--- a/src/shader_recompiler/ir_opt/dual_vertex_pass.cpp
++++ b/src/shader_recompiler/ir_opt/dual_vertex_pass.cpp
+@@ -7,10 +7,14 @@
+ namespace Shader::Optimization {
+ 
+ void VertexATransformPass(IR::Program& program) {
++    // Todos los epílogos, no solo el primero: un VertexA con más de una salida (los vertex shaders dobles del glslc
++    // del SDK 8 traen una condicional antes de la salida normal) se quedaba con el epílogo de la salida que se
++    // ejecuta, y con convert_depth_mode la profundidad se convertía dos veces, (z + 3w) / 4: el plano cercano
++    // quedaba a la mitad de distancia y el buffer de profundidad, comprimido en [0.5, 1].
+     for (IR::Block* const block : program.blocks) {
+         for (IR::Inst& inst : block->Instructions()) {
+             if (inst.GetOpcode() == IR::Opcode::Epilogue) {
+-                return inst.Invalidate();
++                inst.Invalidate();
+             }
+         }
+     }
+@@ -20,7 +24,7 @@ void VertexBTransformPass(IR::Program& program) {
+     for (IR::Block* const block : program.blocks) {
+         for (IR::Inst& inst : block->Instructions()) {
+             if (inst.GetOpcode() == IR::Opcode::Prologue) {
+-                return inst.Invalidate();
++                inst.Invalidate();
+             }
+         }
+     }

@@ -577,7 +577,8 @@ void nvnCommandBufferSetShaderScratchMemory(void*, const void*, int64_t, size_t)
 void nvnCommandBufferSaveZCullData(void*, uint64_t, size_t) {}
 void nvnCommandBufferRestoreZCullData(void*, uint64_t, size_t) {}
 
-// Estado de rasterización que en Vulkan va dentro de la pipeline. El ejecutor no lo emula: haría falta un campo más en
+// Estado de rasterización que en Vulkan va dentro de la pipeline. El ejecutor no lo emula (salvo el desplazamiento de
+// polígonos, SetPolygonOffsetClamp, que va como estado dinámico): haría falta un campo más en
 // PipelineKey (y cambiar el formato de pipelines_estado.bin y de la caché de pipelines), y el ancho de línea y los límites
 // de profundidad, además, características que no se piden al crear el dispositivo (wideLines, depthBounds). Lo de por
 // defecto es lo que ya hace; si el juego pide otra cosa se avisa una vez por función.
@@ -600,10 +601,14 @@ void nvnCommandBufferSetDepthClamp(void*, nvn::Boolean enable) {
     static std::atomic<int> logged{0};
     if (enable) warn_raster_state(logged, "SetDepthClamp");
 }
-// Factor, unidades y límite del desplazamiento de polígonos (los que activa PolygonState::offset_enables).
-void nvnCommandBufferSetPolygonOffsetClamp(void*, float factor, float units, float clamp) {
+// Factor, unidades y límite del desplazamiento de polígonos (los que activa PolygonState::offset_enables). El ejecutor
+// lo pone como depth bias dinámico. Catherine: Full Body lo usa en sus mapas de sombras (factor 1.4, unidades 4,
+// límite 4) y lo deja a 0 al acabar el pase.
+void nvnCommandBufferSetPolygonOffsetClamp(void* cmd, float factor, float units, float clamp) {
     static std::atomic<int> logged{0};
-    if (factor != 0.0f || units != 0.0f || clamp != 0.0f) warn_raster_state(logged, "SetPolygonOffsetClamp");
+    if ((factor != 0.0f || units != 0.0f) && nvn::first_times(logged, 4))
+        NVN_LOG("SetPolygonOffsetClamp: factor %g, unidades %g, límite %g\n", factor, units, clamp);
+    record(cmd, cmd::PolygonOffset{factor, units, clamp});
 }
 // Referencia del alpha test de ColorState: Vulkan no tiene alpha test fijo y el traductor no lo añade a los shaders.
 void nvnCommandBufferSetAlphaRef(void*, float) {}

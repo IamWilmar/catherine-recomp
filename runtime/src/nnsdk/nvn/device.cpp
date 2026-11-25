@@ -125,22 +125,24 @@ namespace nvn {
 int g_window_origin_mode = 0;
 int g_depth_mode = -1;  // -1: el juego no ha llamado a SetDepthMode (ver depth_mode())
 
-// Si el juego no fija el modo: [0,1] (NEAR_IS_ZERO). Los demás juegos lo fijan ellos mismos justo después de crear el
-// dispositivo, antes de traducir ningún shader; Catherine: Full Body nunca llama a SetDepthMode y su cámara es de
-// estilo OpenGL. En la consola recorta como [0,1]: lo que queda a menos de ~2 veces el plano cercano no sale. En la
-// escena del sushi del día 2 (Kappa Heaven) un trozo de la barra queda a 52-56 u de una cámara de cercano 30; con
-// [-1,1] tapaba toda la toma (negra encima de la cinta) y en la versión de consola se ve a Johnny y Vincent con los
-// shoji detrás, igual que con [0,1] (corte a 59 u). Los planos de la profundidad de campo los pasa a [0,1]
-// Executor::dof_planes_to_camera, a las mismas distancias que con [-1,1].
-// <datos>/profundidad_gl (al arrancar): [-1,1], como hasta la v0.1.4.
+// Si el juego no fija el modo: el de NVN por defecto, NEAR_IS_MINUS_W (estilo OpenGL: recorte en -w <= z y profundidad
+// (z+1)/2). Los demás juegos lo fijan ellos mismos justo después de crear el dispositivo, antes de traducir ningún
+// shader; Catherine: Full Body nunca llama a SetDepthMode y su cámara es de estilo OpenGL.
+// Aquí se puso dos veces [0,1] por defecto (v0.1.2 y v0.1.5) y las dos fue un diagnóstico equivocado. Lo que fallaba
+// era el traductor: los vertex shaders dobles (VertexA + VertexB) convertían la profundidad DOS veces, (z + 3w) / 4
+// (tools/patches/eden-zzzzzzzzzz-epilogos-vertex-a.patch). El plano cercano quedaba a la mitad de distancia (en el sushi
+// del día 2, Kappa Heaven, se colaba el muro en el que está metida la cámara y tapaba la toma) y el buffer de
+// profundidad, comprimido en [0.5, 1] (la profundidad de campo comparaba sus planos con una profundidad falsa). [0,1]
+// sin convertir lo tapaba recortando de más: todo lo que queda a menos de 2fn/(f+n), unas 2 veces el plano cercano (en
+// esa escena, los platos y la cinta, que la consola sí dibuja).
 int depth_mode() {
     if (g_depth_mode >= 0) return g_depth_mode;
-    static const int fallback = [] {
-        const int mode = NVN_FLAG("profundidad_gl") ? 0 : 1;
-        NVN_LOG("DepthMode sin fijar por el juego: %d (%s)\n", mode, mode ? "[0,1], como en la consola" : "[-1,1], profundidad_gl");
-        return mode;
+    static const bool logged = [] {
+        NVN_LOG("DepthMode sin fijar por el juego: 0 ([-1,1], el de NVN)\n");
+        return true;
     }();
-    return fallback;
+    (void)logged;
+    return 0;
 }
 }  // namespace nvn
 using nvn::g_depth_mode;

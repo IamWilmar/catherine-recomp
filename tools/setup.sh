@@ -22,7 +22,18 @@ if [ ! -d "$TP/eden" ]; then
   git -C "$TP/eden" sparse-checkout set src/shader_recompiler src/common
   git -C "$TP/eden" fetch -q --depth 1 --filter=blob:none origin "$EDEN_COMMIT"
   git -C "$TP/eden" checkout -q FETCH_HEAD
+fi
+# This project's patches (tools/patches/eden-*.patch, in order). Also on a third_party/eden fetched earlier: if the list
+# of patches changed since the last run (its stamp, third_party/eden/.parches), the tree goes back to the pinned commit
+# and they are all applied again. A translator missing a patch builds just the same.
+# Los parches propios, también sobre un third_party/eden ya bajado: si la lista cambió, se vuelve al commit fijado y se
+# aplican todos de nuevo.
+sello="$(cat "$ROOT"/tools/patches/eden-*.patch | git hash-object --stdin)"
+if [ "$(cat "$TP/eden/.parches" 2> /dev/null)" != "$sello" ]; then
+  git -C "$TP/eden" checkout -q -- src
+  git -C "$TP/eden" clean -fdq src
   for patch in "$ROOT"/tools/patches/eden-*.patch; do git -C "$TP/eden" apply "$patch"; done
+  echo "$sello" > "$TP/eden/.parches"
 fi
 # Same versions as Eden's cpmfile.json.
 clone fmt https://github.com/fmtlib/fmt.git 12.1.0

@@ -32,6 +32,14 @@ target_sources(eden_shader PRIVATE ${CMAKE_CURRENT_LIST_DIR}/nvn_shader.cpp ${CM
 target_include_directories(eden_shader PUBLIC ${CMAKE_CURRENT_LIST_DIR})
 target_link_libraries(eden_shader PRIVATE spirv_tools_opt)
 
+# Eden sin tools/patches/eden-zzzzzzzzzz-epilogos-vertex-a.patch compila igual y convierte la profundidad dos veces en
+# los vertex shaders dobles (el buffer en [0.5, 1], el plano cercano a la mitad): que no se pueda compilar así.
+file(READ ${TP}/eden/src/shader_recompiler/ir_opt/dual_vertex_pass.cpp NVN_DUAL_VERTEX_PASS)
+string(FIND "${NVN_DUAL_VERTEX_PASS}" "return inst.Invalidate();" NVN_DUAL_VERTEX_SIN_PARCHE)
+if(NOT NVN_DUAL_VERTEX_SIN_PARCHE EQUAL -1)
+  message(FATAL_ERROR "third_party/eden sin eden-zzzzzzzzzz-epilogos-vertex-a.patch: ejecuta tools/setup.sh")
+endif()
+
 # Huella del traductor para la caché de SPIR-V de la SD (<datos>/spirv.bin, ver nnsdk/nvn/spirv_cache.h): el contenido
 # de todo lo que decide una traducción. Eden ya parcheado (tools/patches se aplica sobre third_party), el puente y su
 # shim, sirit y SPIRV-Tools. Si cambia cualquiera, CMake se vuelve a configurar (CMAKE_CONFIGURE_DEPENDS; apk.sh configura siempre)

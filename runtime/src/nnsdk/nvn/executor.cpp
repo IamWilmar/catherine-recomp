@@ -267,7 +267,7 @@ struct VariantIndex<T, std::variant<Ts...>> {
 };
 template <typename T>
 constexpr size_t kCommandIndex = VariantIndex<T, Command>::value;
-static_assert(kCommandIndex<cmd::SetRenderTargets> == 0 && kCommandIndex<cmd::TransformFeedback> == std::variant_size_v<Command> - 1);
+static_assert(kCommandIndex<cmd::SetRenderTargets> == 0 && kCommandIndex<cmd::PolygonOffset> == std::variant_size_v<Command> - 1);
 
 // Mismos targets con las mismas vistas (lo que hay más allá de count no cuenta).
 bool same_targets(const cmd::SetRenderTargets& a, const cmd::SetRenderTargets& b) {
@@ -1083,6 +1083,7 @@ struct QueueState {
     DescriptorPool* sampler_pool = nullptr;
     uint32_t stencil_ref[2] = {}, stencil_mask[2] = {0xFF, 0xFF}, stencil_value_mask[2] = {0xFF, 0xFF};
     float blend_color[4] = {};
+    float polygon_offset[3] = {};  // SetPolygonOffsetClamp: factor, unidades, límite
     bool render_enabled = true;
     bool rasterizer_discard = false;  // SetRasterizerDiscard: los draws no rasterizan nada
     bool primitive_restart = false;
@@ -1773,6 +1774,7 @@ private:
         VkRect2D scissor;
         float blend[4];
         uint32_t ref[2], write_mask[2], compare_mask[2];
+        float bias[3];  // vkCmdSetDepthBias: constante, límite, pendiente
     };
     DynamicState bound_dynamic_{};  // el puesto en cmd_ (válido si dynamic_valid_)
     VkBuffer bound_vb_buf_[16] = {};  // vertex buffers enlazados en cmd_
@@ -2948,14 +2950,14 @@ private:
     uint64_t cam_frame_ = ~0ull;
     void note_camera_planes();
     // Profundidad de campo de Catherine: Full Body (pase CoC ps 8ff3083d0243b7a0, ubo0 = focal, cerca, lejos, límite en
-    // profundidad (z+1)/2, y las inversas de los dos rangos). Los planos salen tal cual de los datos de cada cámara
-    // (registros de foco + plano cercano/lejano de la cinemática), y en las cámaras con el plano cercano por debajo de 25
-    // (título 1, menús 10, cafetería 15) solo tienen sentido leídos con cercano 25: con su propia proyección los
-    // primeros planos y los menús salían desenfocados enteros. Medido toma a toma contra un vídeo de la versión de consola
-    // (23-11): con esta conversión coinciden el título, los menús, la intro del bar (cámaras de 10, 15, 50 y 200) y la
-    // cafetería (15 y 25). Por qué la consola se comporta así no está claro (¿un cercano mínimo de 25 en su cámara?).
-    // Los planos se pasan de "cercano 25" a la proyección del frame y se recalculan las inversas.
-    // <datos>/sin_dof_cerca_25 (en vivo): sin convertir, como antes.
+    // profundidad (z+1)/2, y las inversas de los dos rangos). Los planos salen tal cual de los datos de cada cámara y el
+    // shader los compara con el buffer de profundidad: con el buffer bien (una sola conversión) no hay que tocarlos.
+    // DEPURACIÓN, apagada por defecto (<datos>/dof_regla_25, en vivo): la "regla del cercano 25" de las v0.1.3-v0.1.5
+    // (leer los planos de las cámaras de cercano < 25 como si fuera 25 y pasarlos a la proyección del frame). Se dedujo a
+    // ojo el 23-11 contra un buffer con la conversión doble, comprimido en [0.5, 1]: compensaba ese fallo solo en parte
+    // (el corte quedaba a ~la mitad de la distancia que calculaba: de ahí el plano de foco cruzando la cabeza en los
+    // primeros planos de la cafetería). Queda para comparar en el aparato con la escena en marcha; después se borra,
+    // con note_camera_planes.
     void dof_planes_to_camera(float* ubo);
 public:
     void frame_diag() {
@@ -3033,7 +3035,7 @@ constexpr const char* kCommandNames[] = {
     "BindVertexStreams", "SetPools", "Stencil", "Draw", "Dispatch", "CopyBuffer", "CopyTexture", "CopyBufferToTexture",
     "Barrier", "ReportCounter", "BlendColor", "RenderEnable", "ReportValue", "ClearBuffer", "BindImage", "ClearTexture",
     "UpdateBuffer", "PrimitiveRestart", "CopyTextureToBuffer", "Downsample", "Event", "SampleMask", "FenceSync",
-    "TransformFeedback"};
+    "TransformFeedback", "PolygonOffset"};
 static_assert(std::size(kCommandNames) == std::variant_size_v<Command>);
 
 bool Executor::init() {
@@ -4665,6 +4667,8 @@ void Executor::apply(const Command& c) {
                     signal_event_value(v.value, v.mode, v.v);  // como ReportValue: en orden, al reproducir
             } else if constexpr (std::is_same_v<T, cmd::SampleMask>) {
                 st_.sample_mask = v.mask;
+            } else if constexpr (std::is_same_v<T, cmd::PolygonOffset>) {
+                st_.polygon_offset[0] = v.factor, st_.polygon_offset[1] = v.units, st_.polygon_offset[2] = v.clamp;
             } else if constexpr (std::is_same_v<T, cmd::TransformFeedback>) {
                 // Begin empieza a capturar desde el principio de cada buffer; Resume sigue donde lo dejó Pause (el buffer
                 // de control del juego no se lee ni se escribe: DrawTransformFeedback no está emulado).
@@ -8145,6 +8149,9 @@ VkResult make_graphics_pipeline(const PipelineKey& key, const VkShaderModule* mo
     // Con el viewport invertido (ver draw) el giro coincide con el de NVN: CW es CW.
     rs.frontFace = key.polygon.front_face ? VK_FRONT_FACE_COUNTER_CLOCKWISE : VK_FRONT_FACE_CLOCKWISE;
     rs.lineWidth = 1.0f;
+    // Desplazamiento de polígonos (NVNpolygonOffsetEnable: POINT 1, LINE 2, FILL 4; el bit del modo con el que se
+    // rasteriza). Los valores van dinámicos (SetPolygonOffsetClamp, ver draw).
+    rs.depthBiasEnable = (key.polygon.offset_enables >> std::min<int>(key.polygon.polygon_mode, 2)) & 1;
     rs.rasterizerDiscardEnable = key.rasterizer_discard;
     VkPipelineMultisampleStateCreateInfo ms{VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO};
     ms.rasterizationSamples = static_cast<VkSampleCountFlagBits>(key.samples);
@@ -8183,9 +8190,9 @@ VkResult make_graphics_pipeline(const PipelineKey& key, const VkShaderModule* mo
     cb.pAttachments = blends.data();
     VkDynamicState dyn[] = {VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR, VK_DYNAMIC_STATE_STENCIL_COMPARE_MASK,
                             VK_DYNAMIC_STATE_STENCIL_WRITE_MASK, VK_DYNAMIC_STATE_STENCIL_REFERENCE,
-                            VK_DYNAMIC_STATE_BLEND_CONSTANTS};
+                            VK_DYNAMIC_STATE_BLEND_CONSTANTS, VK_DYNAMIC_STATE_DEPTH_BIAS};
     VkPipelineDynamicStateCreateInfo dy{VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO};
-    dy.dynamicStateCount = 6;
+    dy.dynamicStateCount = static_cast<uint32_t>(std::size(dyn));
     dy.pDynamicStates = dyn;
 
     VkGraphicsPipelineCreateInfo pi{VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO};
@@ -8691,6 +8698,11 @@ void Executor::trace_draw(const cmd::Draw& d) {
             int(ds.stencil_test), st_.polygon.cull_face, st_.polygon.front_face, st_.polygon.polygon_mode,
             st_.attribs.size(), st_.streams.size(), int(st_.primitive_restart), st_.restart_index, int(st_.color.logic_op),
             int(st_.multisample.alpha_to_coverage), int(st_.multisample.samples));
+    if (st_.polygon.offset_enables)
+        NVN_LOG("F   sesgo de polígonos 0x%x: factor %g unidades %g límite %g%s%s\n", st_.polygon.offset_enables,
+                st_.polygon_offset[0], st_.polygon_offset[1], st_.polygon_offset[2],
+                vk()->depth_bias_clamp ? "" : " (límite sin aplicar: falta depthBiasClamp)",
+                NVN_FLAG("sin_sesgo_poligonos") ? " (APAGADO: sin_sesgo_poligonos)" : "");
     if (ds.stencil_test)
         NVN_LOG("F   stencil delante f%d ops %d/%d/%d ref %u máscara %#x escritura %#x | detrás f%d ops %d/%d/%d ref %u máscara %#x escritura %#x\n",
                 int(ds.front_func), int(ds.front_fail), int(ds.front_zfail), int(ds.front_zpass), st_.stencil_ref[0],
@@ -8837,20 +8849,17 @@ void Executor::note_camera_planes() {
 void Executor::dof_planes_to_camera(float* p) {
     if (cam_frame_ != frame_ || cam_near_ <= 0.0f || cam_far_ <= cam_near_) return;
     const double n = cam_near_, f = cam_far_;
-    // Los planos de foco van en profundidad (z+1)/2: las cámaras con el plano cercano por debajo de 25 (título 1, menús 10,
-    // cafetería 15) con cercano 25; las de 25 o más (50, 200 en la intro del bar) con el suyo (comparado toma a toma con
-    // la versión de consola). Se pasan a distancia y de ahí a la profundidad del buffer: (z+1)/2 con el cercano de la
-    // cámara o, en [0,1] (depth_mode, el de la consola), z de NDC tal cual.
-    const bool zero_to_one = nvn::depth_mode() == 1;
-    const double kAuthoredNear = n < 24.5 ? 25.0 : n;
-    if (n >= 24.5 && !zero_to_one) return;  // ya están en las unidades del buffer
+    // La regla de las v0.1.3-v0.1.5 (ver la declaración): solo las cámaras con el plano cercano por debajo de 25 (título 1,
+    // menús 10, cafetería 15). Sus planos se leen como profundidad (z+1)/2 de una cámara de cercano 25, se pasan a
+    // distancia y de ahí a la profundidad (z+1)/2 de la cámara del frame.
+    const double kAuthoredNear = 25.0;
+    if (n >= 24.5) return;
     auto convert = [&](float depth) -> float {
         if (depth <= 0.0f || depth >= 1.0f) return depth;
         const double k = 1.0 - depth * (f - kAuthoredNear) / f;
         if (k <= 0.0) return depth;
         const double dist = kAuthoredNear / k;
         if (dist <= n) return 0.0f;
-        if (zero_to_one) return static_cast<float>(std::max(0.0, ((f + n) - 2.0 * f * n / dist) / (f - n)));
         return static_cast<float>(f / (f - n) * (1.0 - n / dist));
     };
     const float in[3] = {p[0], p[1], p[2]};
@@ -9764,7 +9773,7 @@ void Executor::draw(const cmd::Draw& in) {
                     // Maxwell no comprueba límites: lo que se lee más allá del rango enlazado es la memoria de detrás. Si el
                     // tamaño que da el juego no es múltiplo de 16, los bytes hasta el siguiente múltiplo son el resto de SU
                     // estructura y se copian de la memoria (Catherine: su pase de profundidad de campo enlaza 28 bytes con un
-                    // shader que lee 32; con ceros su último parámetro llegaba 0 y difuminaba la cinemática entera). De ahí en
+                    // shader que declara 32, aunque no llega a leer los 4 de detrás). De ahí en
                     // adelante es memoria de al lado y se queda en ceros (el VS de la G-buffer de Xenoblade lee c3 hasta 368
                     // con 256 enlazados, que ya es múltiplo de 16). <datos>/sin_ubo_detras: ceros del todo.
                     VkDeviceSize resto = 0;
@@ -9782,7 +9791,7 @@ void Executor::draw(const cmd::Draw& in) {
                     st_.stages[s]->print == 0x8ff3083d0243b7a0ull) {
                     float* dof = reinterpret_cast<float*>(a.data);
                     if (NVN_FLAG("sin_desenfoque")) dof[3] = 0.0f, dof[4] = 0.0f, dof[5] = 0.0f;
-                    else if (!NVN_FLAG("sin_dof_cerca_25")) dof_planes_to_camera(dof);
+                    else if (NVN_FLAG("dof_regla_25")) dof_planes_to_camera(dof);  // DEPURACIÓN: la regla de las v0.1.3-v0.1.5
                 }
                 prof_copied_bytes_ += size;
                 note_copy(range.address, size, r.kind == Resource::StorageBuffer, s);
@@ -9951,7 +9960,19 @@ void Executor::draw(const cmd::Draw& in) {
     memcpy(ds.blend, st_.blend_color, sizeof ds.blend);
     for (int f = 0; f < 2; f++)
         ds.ref[f] = st_.stencil_ref[f], ds.write_mask[f] = st_.stencil_mask[f], ds.compare_mask[f] = st_.stencil_value_mask[f];
+    // Desplazamiento de polígonos del juego (SetPolygonOffsetClamp; solo cuenta en las pipelines con depthBiasEnable).
+    // La pendiente de Vulkan va por píxel del pase: si el pase está escalado, cada píxel del juego son rp_scale_ del
+    // pase y el factor crece igual. Sin la feature depthBiasClamp el límite tiene que ser 0 (sin límite).
+    // <datos>/sin_sesgo_poligonos (en vivo): sin desplazamiento, como hasta la v0.1.5.
+    if (NVN_FLAG("sin_sesgo_poligonos")) {
+        ds.bias[0] = ds.bias[1] = ds.bias[2] = 0.0f;
+    } else {
+        ds.bias[0] = st_.polygon_offset[1];
+        ds.bias[1] = vk()->depth_bias_clamp ? st_.polygon_offset[2] : 0.0f;
+        ds.bias[2] = st_.polygon_offset[0] * static_cast<float>(rp_scale_);
+    }
     const bool all = !dynamic_valid_;
+    if (all || memcmp(ds.bias, bound_dynamic_.bias, sizeof ds.bias)) vkCmdSetDepthBias(cmd_, ds.bias[0], ds.bias[1], ds.bias[2]);
     if (all || memcmp(&ds.viewport, &bound_dynamic_.viewport, sizeof ds.viewport)) vkCmdSetViewport(cmd_, 0, 1, &ds.viewport);
     if (all || memcmp(&ds.scissor, &bound_dynamic_.scissor, sizeof ds.scissor)) vkCmdSetScissor(cmd_, 0, 1, &ds.scissor);
     if (all || memcmp(ds.blend, bound_dynamic_.blend, sizeof ds.blend)) vkCmdSetBlendConstants(cmd_, ds.blend);

@@ -59,6 +59,8 @@ int main(int argc, char** argv) {
     nvnshader::Options options;
     std::string ir;
     if (getenv("IR")) options.ir = &ir;  // IR=1 shadertool …: imprime el IR de Eden
+    // PROFUNDIDAD=1: la profundidad de -1..1 pasada a 0..1 al final del vertex shader (modo GL de NVN, el de Catherine)
+    options.convert_depth_mode = getenv("PROFUNDIDAD") != nullptr;
     // Como en la Flip: arrays bindless al set 1 y NonUniform (el Adreno 650 lo tiene). SIN_BINDLESS=1 / SIN_NONUNIFORM=1:
     // como antes / sin la decoración.
     options.bindless_arrays = !getenv("SIN_BINDLESS");

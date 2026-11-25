@@ -294,6 +294,12 @@ struct TransformFeedback {
     int index;          // Bind: buffer de captura (0..3)
     BufferRange range;  // Bind
 };
+// SetPolygonOffsetClamp: el desplazamiento de profundidad de los polígonos (lo activa PolygonState::offset_enables).
+// Como en OpenGL: pendiente * factor + r * unidades (r: el paso mínimo del formato de profundidad), limitado a clamp si
+// no es 0.
+struct PolygonOffset {
+    float factor, units, clamp;
+};
 
 }  // namespace cmd
 
@@ -306,7 +312,8 @@ using Command = std::variant<cmd::SetRenderTargets, cmd::ClearColor, cmd::ClearD
                              cmd::CopyBufferToTexture, cmd::Barrier, cmd::ReportCounter, cmd::BlendColor,
                              cmd::RenderEnable, cmd::ReportValue, cmd::ClearBuffer, cmd::BindImage, cmd::ClearTexture,
                              cmd::UpdateBuffer, cmd::PrimitiveRestart, cmd::CopyTextureToBuffer, cmd::Downsample,
-                             cmd::Event, cmd::SampleMask, cmd::FenceSync, cmd::TransformFeedback>;
+                             cmd::Event, cmd::SampleMask, cmd::FenceSync, cmd::TransformFeedback,
+                             cmd::PolygonOffset>;
 
 // Las listas se reciclan (cmdbuf.cpp) y vaciarlas no recorre sus ~35k comandos: que siga siendo así.
 static_assert(std::is_trivially_destructible_v<Command> && std::is_trivially_copyable_v<Command>);

@@ -789,6 +789,10 @@ void android_main(android_app* app) {
     setenv("NIER_TRAZA_LIGERA", "1", 1);
     setenv("NIER_SONDA_MEMORIA", "", 1);  // DEPURACIÓN: "1": mide los límites del driver al arrancar  // DEPURACIÓN: trazas sin volcar render targets ni shaders
     std::string log = g_data + "/log.txt";
+    // Los dos logs anteriores se conservan (log_1.txt el de la sesión anterior, log_2.txt el de antes): tras un cierre
+    // inesperado el rastro está al final de su log, y abrir el juego otra vez no lo borra.
+    rename((g_data + "/log_1.txt").c_str(), (g_data + "/log_2.txt").c_str());
+    rename(log.c_str(), (g_data + "/log_1.txt").c_str());
     if (freopen(log.c_str(), "w", stdout)) {
         // Por bloques: línea a línea, cada printf era una escritura en la SD. <datos>/registro o <datos>/log_lineas: línea
         // a línea (para leerlo en vivo, y lo último no se pierde si el proceso se cae).

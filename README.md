@@ -74,7 +74,8 @@ about the app itself are always welcome in the issues; just please don't share o
 4. Press **Start game**. From then on the app starts the game directly; to choose another folder, switch on
    *Change folder* in the settings panel (see below) or open the app twice in a row (within ten seconds).
 
-Saves, the shader cache and `log.txt` are written into that same folder. The first time you visit each place the game
+Saves, the shader cache and `log.txt` are written into that same folder. The logs of the two previous
+sessions are kept as `log_1.txt` and `log_2.txt`. The first time you visit each place the game
 may stutter while its shaders are translated and compiled; they are cached for the next time.
 
 ## Controls and the settings panel
@@ -108,7 +109,7 @@ at start-up.
 | `modo_tv` | TV mode (the same switch as in the settings panel): the game renders as it does on a TV. Read at start-up. |
 | `sin_fps` | Hides the FPS counter (the same switch as in the settings panel). |
 | `sin_desenfoque` | Turns the game's depth of field off: everything sharp (the same switch as in the settings panel). Read while the game runs. |
-| `profundidad_gl` | Uses the depth format of v0.1.4 and earlier instead of the console's: objects very close to the camera are drawn again (in some sushi bar close-ups they cover the whole shot). For comparison. Read at start-up. |
+| `sin_sesgo_poligonos` | Turns off the depth offset the game asks for when it draws its shadow maps, as in v0.1.5 and earlier. For comparison if shadows show stripes. Read while the game runs. |
 | `sin_avisos_version` | Turns the update notices off: no request to GitHub (the same switch as in the settings panel). |
 | `con_barras_sistema` | Keeps Android's navigation and status bars on screen. By default the app hides them while the game runs (swipe in from an edge to bring them up for a moment). Read when the game window gets focus. |
 | `botones_xbox`, `botones_retro` | Force the face buttons to be read by position (`botones_xbox`) or by name (`botones_retro`) if a controller comes out swapped. |

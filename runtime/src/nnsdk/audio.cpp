@@ -456,6 +456,8 @@ aaudio_data_callback_result_t SharedStream::callback(AAudioStream*, void* user, 
     }
     if (const auto* f = self->fuente_.load(std::memory_order_acquire)) f->mezclar(out, size_t(frames));
     for (size_t i = 0; i < muestras; i++) self->pico_ = std::max<int32_t>(self->pico_, std::abs(int32_t{out[i]}));
+    // <datos>/mudo (en vivo): el juego no suena (para las pruebas). Solo se calla la salida: colas, mezcla y ritmo, igual.
+    if (NVN_FLAG("mudo")) std::memset(out, 0, muestras * sizeof(int16_t));
     self->liberar_locked();
     self->frames_ += frames;
     self->frames_datos_ += n;
